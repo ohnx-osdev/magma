@@ -4,6 +4,7 @@
 
 #include <ddk/device.h>
 #include <ddk/protocol/pci.h>
+#include <magenta/process.h>
 
 #include "magenta_platform_device.h"
 #include "magenta_platform_interrupt.h"
@@ -34,6 +35,10 @@ public:
     ~MagentaPlatformMmio()
     {
         DLOG("MagentaPlatformMmio dtor");
+        mx_status_t status = mx_vmar_unmap(mx_vmar_root_self(), reinterpret_cast<uintptr_t>(addr()), size());
+        if (status != NO_ERROR) {
+            DLOG("error unmapping %p (len %zu): %d\n", addr(), size(), status);
+        }
         mx_handle_close(handle_);
     }
 
@@ -44,22 +49,20 @@ private:
 std::unique_ptr<PlatformMmio>
 MagentaPlatformDevice::CpuMapPciMmio(unsigned int pci_bar, PlatformMmio::CachePolicy cache_policy)
 {
-    DLOG("CpuMapPciMmio bar %d", pci_bar);
+    DLOG("CpuMapPciMmio bar %d, cache policy %u", pci_bar, cache_policy);
 
-    void* protocol;
-    mx_status_t status = device_op_get_protocol(mx_device(), MX_PROTOCOL_PCI, &protocol);
-    if (status != NO_ERROR)
-        return DRETP(nullptr, "device_op_get_protocol failed");
+    if (!pci()) {
+        return DRETP(nullptr, "couldn't get pci protocol");
+    }
 
-    auto pci = reinterpret_cast<pci_protocol_t*>(protocol);
     void* addr;
     uint64_t size;
-
     mx_handle_t handle;
-    status = pci->map_mmio(mx_device(), pci_bar, static_cast<mx_cache_policy_t>(cache_policy),
-                           &addr, &size, &handle);
-    if (status < 0)
-        return DRETP(nullptr, "map_mmio failed");
+    mx_status_t status = pci()->map_resource(mx_device(), pci_bar, cache_policy, &addr, &size, &handle);
+    if (status != NO_ERROR) {
+        DLOG("map_resource returned %d\n", status);
+        return DRETP(nullptr, "map_resource failed");
+    }
 
     std::unique_ptr<MagentaPlatformMmio> mmio(new MagentaPlatformMmio(addr, size, handle));
 
@@ -71,36 +74,24 @@ MagentaPlatformDevice::CpuMapPciMmio(unsigned int pci_bar, PlatformMmio::CachePo
 
 bool MagentaPlatformDevice::ReadPciConfig16(uint64_t addr, uint16_t* value)
 {
-    void* protocol;
-    mx_status_t status = device_op_get_protocol(mx_device(), MX_PROTOCOL_PCI, &protocol);
-    if (status != NO_ERROR)
-        return DRETF(false, "device_op_get_protocol failed");
-
-    auto pci = reinterpret_cast<pci_protocol_t*>(protocol);
-    const pci_config_t* pci_config;
-    mx_handle_t cfg_handle;
-    status = pci->get_config(mx_device(), &pci_config, &cfg_handle);
-    if (status < 0)
-        return DRETF(false, "pci get_config failed");
+    if (!value || !pci_config() || addr >= cfg_size_) {
+        return false;
+    }
 
     *value =
-        *reinterpret_cast<const uint16_t*>(reinterpret_cast<const uint8_t*>(pci_config) + addr);
+        *reinterpret_cast<const uint16_t*>(reinterpret_cast<const uint8_t*>(pci_config()) + addr);
 
-    mx_handle_close(cfg_handle);
     return true;
 }
 
 std::unique_ptr<PlatformInterrupt> MagentaPlatformDevice::RegisterInterrupt()
 {
-    void* protocol;
-    mx_status_t status = device_op_get_protocol(mx_device(), MX_PROTOCOL_PCI, &protocol);
-    if (status != NO_ERROR)
-        return DRETP(nullptr, "device_op_get_protocol failed (%d)", status);
-
-    auto pci = reinterpret_cast<pci_protocol_t*>(protocol);
+    if (!pci()) {
+        return DRETP(nullptr, "could not get pci protocol");
+    }
 
     uint32_t max_irqs;
-    status = pci->query_irq_mode_caps(mx_device(), MX_PCIE_IRQ_MODE_LEGACY, &max_irqs);
+    mx_status_t status = pci()->query_irq_mode_caps(mx_device(), MX_PCIE_IRQ_MODE_LEGACY, &max_irqs);
     if (status != NO_ERROR)
         return DRETP(nullptr, "query_irq_mode_caps failed (%d)", status);
 
@@ -108,16 +99,16 @@ std::unique_ptr<PlatformInterrupt> MagentaPlatformDevice::RegisterInterrupt()
         return DRETP(nullptr, "max_irqs is zero");
 
     // Mode must be Disabled before we can request Legacy
-    status = pci->set_irq_mode(mx_device(), MX_PCIE_IRQ_MODE_DISABLED, 0);
+    status = pci()->set_irq_mode(mx_device(), MX_PCIE_IRQ_MODE_DISABLED, 0);
     if (status != NO_ERROR)
         return DRETP(nullptr, "set_irq_mode(DISABLED) failed (%d)", status);
 
-    status = pci->set_irq_mode(mx_device(), MX_PCIE_IRQ_MODE_LEGACY, 1);
+    status = pci()->set_irq_mode(mx_device(), MX_PCIE_IRQ_MODE_LEGACY, 1);
     if (status != NO_ERROR)
         return DRETP(nullptr, "set_irq_mode(LEGACY) failed (%d)", status);
 
     mx_handle_t interrupt_handle;
-    status = pci->map_interrupt(mx_device(), 0, &interrupt_handle);
+    status = pci()->map_interrupt(mx_device(), 0, &interrupt_handle);
     if (status < 0)
         return DRETP(nullptr, "map_interrupt failed (%d)", status);
 

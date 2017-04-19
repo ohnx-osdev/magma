@@ -13,9 +13,23 @@ namespace magma {
 
 class MagentaPlatformDevice : public PlatformDevice {
 public:
-    MagentaPlatformDevice(mx_device_t* mx_device) : mx_device_(mx_device) {}
+    MagentaPlatformDevice(mx_device_t* mx_device) : mx_device_(mx_device) {
+        void* protocol;
+        mx_status_t status = device_op_get_protocol(mx_device_, MX_PROTOCOL_PCI, &protocol);
+        if (status != NO_ERROR) {
+            return;
+        }
 
-    void* GetDeviceHandle() override { return mx_device(); }
+        pci_ = reinterpret_cast<pci_protocol_t*>(protocol);
+
+        status = pci_->map_resource(mx_device_, PCI_RESOURCE_CONFIG, MX_CACHE_POLICY_UNCACHED_DEVICE,
+                                   (void**)&cfg_, &cfg_size_, &cfg_handle_);
+        if (status != NO_ERROR) {
+            cfg_ = nullptr;
+        }
+    }
+
+    void* GetDeviceHandle() override { return mx_device_; }
 
     bool ReadPciConfig16(uint64_t addr, uint16_t* value) override;
 
@@ -25,9 +39,16 @@ public:
     std::unique_ptr<PlatformInterrupt> RegisterInterrupt() override;
 
 private:
-    mx_device_t* mx_device() { return mx_device_; }
+    mx_device_t* mx_device() const { return mx_device_; }
+    pci_protocol_t* pci() const { return pci_; }
+    pci_config_t* pci_config() const { return cfg_; }
 
-    mx_device_t* mx_device_;
+
+    mx_device_t* mx_device_ = nullptr;
+    pci_protocol_t* pci_ = nullptr;
+    pci_config_t* cfg_ = nullptr;
+    mx_handle_t cfg_handle_;
+    size_t cfg_size_;
 };
 
 } // namespace
