@@ -4,7 +4,6 @@
 
 declare_args() {
   magma_build_root = "//magma"
-  mesa_build_root = "//third_party/mesa"
   expat_build_root = "//third_party/expat"
   msd_intel_gen_build_root = "//drivers/gpu/msd-intel-gen"
   glm_build_root = "//third_party/glm"
@@ -20,4 +19,16 @@ declare_args() {
 
   # Enable this to include fuchsia tracing capability
   magma_enable_tracing = false
+
+  build_mali_vulkan_driver = false
+  build_intel_gen_driver = target_cpu == "x64"
+}
+
+declare_args() {
+  if (build_mali_vulkan_driver) {
+    mali_build_root = "//third_party/arm-mali-bifrost"
+  }
+  if (build_intel_gen_driver) {
+    mesa_build_root = "//third_party/mesa"
+  }
 }

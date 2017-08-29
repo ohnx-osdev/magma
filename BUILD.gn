@@ -12,46 +12,59 @@ group("vulkan") {
 }
 
 package("magma-common") {
-  if (target_cpu == "x64") {
+  if (build_mali_vulkan_driver || build_intel_gen_driver) {
     testonly = true
     deps = [
       ":libmagma",
       ":libvulkan",
       ":tools",
-      "$mesa_build_root:tests",
-      "$msd_intel_gen_build_root:test",
-      "$msd_intel_gen_build_root:tests",
-      "//magma/tests:tests",
-      "//magma/tests/vkcube",
     ]
 
-    binaries = [
-      {
-        name = "magma_info"
-      },
-      {
-        name = "vkcube"
-      },
-    ]
-
-    libraries = [
-      {
-        name = "libmagma.so"
-      },
-      {
-        name = "libvulkan_intel.so"
-      },
-    ]
-
-    resources = [ {
-          path = rebase_path("icd/magma_icd.json")
-          dest = "vulkan/icd.d/magma_icd.json"
+    binaries = [ {
+          name = "magma_info"
         } ]
+
+    if (build_intel_gen_driver) {
+      deps += [
+        "$mesa_build_root:tests",
+        "$msd_intel_gen_build_root:test",
+        "$msd_intel_gen_build_root:tests",
+        "//magma/tests:tests",
+        "//magma/tests/vkcube",
+      ]
+      binaries += [ {
+            name = "vkcube"
+          } ]
+    }
+
+    libraries = [ {
+          name = "libmagma.so"
+        } ]
+
+    if (build_mali_vulkan_driver) {
+      libraries += [ {
+            name = "libvulkan_arm.so"
+          } ]
+      resources = [ {
+            path = rebase_path("icd/arm_icd.json")
+            dest = "vulkan/icd.d/arm_icd.json"
+          } ]
+    }
+
+    if (build_intel_gen_driver) {
+      libraries += [ {
+            name = "libvulkan_intel.so"
+          } ]
+      resources = [ {
+            path = rebase_path("icd/intel_icd.json")
+            dest = "vulkan/icd.d/intel_icd.json"
+          } ]
+    }
   }
 }
 
 package("magma") {
-  if (target_cpu == "x64") {
+  if (build_intel_gen_driver) {
     deps = [
       "$msd_intel_gen_build_root:msd_intel",
     ]
@@ -81,26 +94,43 @@ group("libmagma") {
   ]
 }
 
-if (target_cpu == "x64") {
+if (build_intel_gen_driver) {
   group("libvulkan") {
     public_deps = [
       "$mesa_build_root:magma_vulkan",
     ]
   }
-
-  # internal only
-  source_set("libmsd") {
+} else if (build_mali_vulkan_driver) {
+  copy("mali_driver") {
+    sources = [
+      "$root_build_dir/arm64-shared/libGLES_mali.so",
+    ]
+    outputs = [
+      "$root_build_dir/arm64-shared/libvulkan_arm.so",
+    ]
     deps = [
-      "src/sys_driver",
-    ]
-    public_deps = [
-      "include:msd_abi",
+      "$mali_build_root:libGLES_mali",
     ]
   }
+  group("libvulkan") {
+    public_deps = [
+      ":mali_driver",
+    ]
+  }
+}
 
-  group("tools") {
-    public_deps = [
-      "src/tools",
-    ]
-  }
+# internal only
+source_set("libmsd") {
+  deps = [
+    "src/sys_driver",
+  ]
+  public_deps = [
+    "include:msd_abi",
+  ]
+}
+
+group("tools") {
+  public_deps = [
+    "src/tools",
+  ]
 }
