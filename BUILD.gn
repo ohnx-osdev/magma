@@ -43,7 +43,7 @@ package("magma-common") {
 
     if (build_mali_vulkan_driver) {
       libraries += [ {
-            name = "libvulkan_arm.so"
+            name = "libGLES_mali.so"
           } ]
       resources = [ {
             path = rebase_path("icd/arm_icd.json")
@@ -101,20 +101,21 @@ if (build_intel_gen_driver) {
     ]
   }
 } else if (build_mali_vulkan_driver) {
-  copy("mali_driver") {
-    sources = [
-      "$root_build_dir/arm64-shared/libGLES_mali.so",
-    ]
-    outputs = [
-      "$root_build_dir/arm64-shared/libvulkan_arm.so",
-    ]
-    deps = [
-      "$mali_build_root:libGLES_mali",
-    ]
-  }
+ # copy("mali_driver") {
+ #   sources = [
+ #     "$root_build_dir/arm64-shared/libGLES_mali.so",
+ #   ]
+ #   outputs = [
+ #     "$root_build_dir/arm64-shared/libvulkan_arm.so",
+ #   ]
+ #   deps = [
+ #     "$mali_build_root:libGLES_mali",
+ #   ]
+ # }
   group("libvulkan") {
     public_deps = [
-      ":mali_driver",
+      "$mali_build_root:libGLES_mali",
+      #":mali_driver",
     ]
   }
 }

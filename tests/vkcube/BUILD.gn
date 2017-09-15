@@ -29,7 +29,8 @@ executable("vkcube") {
   } else {
     deps += [
       "$magma_build_root/tests/vulkan_shim",
-      "$mesa_build_root:magma_vulkan",
+      #"$mesa_build_root:magma_vulkan",
+      "$magma_build_root:libvulkan",
     ]
   }
 }

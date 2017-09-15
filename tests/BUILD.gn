@@ -6,8 +6,8 @@ import("//magma/gnbuild/magma.gni")
 import("//packages/package.gni")
 
 package("magma-dev") {
-  if (current_cpu == "x64") {
     testonly = true
+  if (current_cpu == "x64") {
 
     deps = [
       ":autorun",
@@ -80,6 +80,7 @@ package("magma-dev") {
           name = "libmsd-intel-gen-test.so"
         } ]
   }
+  deps = [":tests"]
 }
 
 if (current_cpu == "x64") {
@@ -91,6 +92,7 @@ if (current_cpu == "x64") {
       "$root_out_dir/autorun",
     ]
   }
+}
 
   group("tests") {
     testonly = true
@@ -102,9 +104,8 @@ if (current_cpu == "x64") {
       "unit_tests:magma_abi_conformance_tests",
       "unit_tests:magma_sys_unit_tests",
       "vkcube",
-      "vkext",
-      "vkreadback",
-      "vkreadback:vk_import_export_readback",
+      #"vkext",
+      #"vkreadback",
+      #"vkreadback:vk_import_export_readback",
     ]
   }
-}
